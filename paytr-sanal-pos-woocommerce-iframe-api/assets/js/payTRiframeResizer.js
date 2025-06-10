@@ -12,7 +12,7 @@ window.onmessage = function(event) {
             setTimeout(function () {
                 document.getElementById("paytriframe").style.maxHeight = "1200px";
                 document.getElementById("paytriframe").style.height = "1000px";
-            }, 2000);
+                }, 2000);
             window.scrollTo(0, document.getElementById("paytriframe").getBoundingClientRect().top + window.pageYOffset - 10);
         } else if (event.data === "fastpay") {
             document.getElementById("paytriframe").style.height = "1100px";
@@ -38,6 +38,15 @@ window.onmessage = function(event) {
             document.getElementById("paytriframe").style.minHeight = "500px";
             document.getElementById("paytriframe").style.height = "500px";
             window.scrollTo(0, document.getElementById("paytriframe").getBoundingClientRect().top + window.pageYOffset - 10);
+        }  else if (event.data.message === "shrink_iframe") {
+            setTimeout(function () {
+                //document.getElementById("paytriframe").style.maxHeight = "1200px";
+                console.log("event.data2",event.data)
+                if (event.data.type === "setHeight") {
+                    document.getElementById("paytriframe").style.height = event.data.value;
+                }
+            }, 100);
+            window.scrollTo(0, document.getElementById("paytriframe").getBoundingClientRect().top + window.pageYOffset - 10);
         }
     }
 };
@@ -48,6 +57,6 @@ window.onload = function(event) {
     if (paytr_iframe_id) {
         document.getElementById("paytriframe").style.minHeight = "600px";
     } else {
-        console.log("paytriframe ID'li element bulunamadı!")
+        console.log("paytriframe ID'li element bulunamadÄ±!")
     }
 };

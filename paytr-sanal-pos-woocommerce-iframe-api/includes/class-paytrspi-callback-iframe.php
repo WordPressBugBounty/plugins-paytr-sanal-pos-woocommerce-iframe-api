@@ -42,7 +42,7 @@ class PaytrCheckoutCallbackIframe {
 						$order->calculate_totals();
 					}
 
-					$note .= __( 'Installment Difference', 'paytr-payment-gateway' ) . ': ' . wc_price( $installment_dif, array( 'currency' => $order->get_currency() ) ) . "\n";
+					$note .= 'Installment Difference: ' . wc_price( $installment_dif, array( 'currency' => $order->get_currency() ) ) . "\n";
 				}
 
 				if ( array_key_exists( 'installment_count', $post ) ) {
