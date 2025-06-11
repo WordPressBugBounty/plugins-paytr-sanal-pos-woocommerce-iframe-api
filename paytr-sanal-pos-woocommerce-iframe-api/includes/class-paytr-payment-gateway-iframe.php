@@ -68,12 +68,13 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
                 'type' => 'title',
                 'description' => sprintf(__('You must add the following callback url <strong>%s</strong> to your <a href="https://www.paytr.com/magaza/ayarlar" target="_blank">Callback URL Settings.</a>'), get_home_url() . '/index.php?wc-api=wc_gateway_paytrcheckout')
             ),
-            'iframe_version' => array(
-            'title' => __('iFrame v2', 'paytr-sanal-pos-woocommerce-iframe-api'),
-    		'label' => __('Enable iFrame v2', 'paytr-sanal-pos-woocommerce-iframe-api'),
+            'iframe_old_version' => array(
+            'title' => __('iFrame v1', 'paytr-sanal-pos-woocommerce-iframe-api'),
+    		'label' => __('Enable iFrame v1', 'paytr-sanal-pos-woocommerce-iframe-api'),
     		'type' => 'checkbox',
     		'default' => 'no',
-    		'description' => __('Enable the new version of iFrame payment page', 'paytr-sanal-pos-woocommerce-iframe-api')
+            'desc_tip' => true,
+    		'description' => __('Enable the old version of iFrame payment page', 'paytr-sanal-pos-woocommerce-iframe-api')
             ),
 
 			'iframe_theme' => array(
@@ -81,6 +82,7 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
     		'label' => __('Enable Dark Theme', 'paytr-sanal-pos-woocommerce-iframe-api'),
     		'type' => 'checkbox',
     		'default' => 'no',
+            'desc_tip' => true,
     		'description' => __('Enable dark theme for payment page', 'paytr-sanal-pos-woocommerce-iframe-api')
             ),
             'enabled' => array(

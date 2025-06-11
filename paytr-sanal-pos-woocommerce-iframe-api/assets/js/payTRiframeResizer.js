@@ -40,8 +40,6 @@ window.onmessage = function(event) {
             window.scrollTo(0, document.getElementById("paytriframe").getBoundingClientRect().top + window.pageYOffset - 10);
         }  else if (event.data.message === "shrink_iframe") {
             setTimeout(function () {
-                //document.getElementById("paytriframe").style.maxHeight = "1200px";
-                console.log("event.data2",event.data)
                 if (event.data.type === "setHeight") {
                     document.getElementById("paytriframe").style.height = event.data.value;
                 }

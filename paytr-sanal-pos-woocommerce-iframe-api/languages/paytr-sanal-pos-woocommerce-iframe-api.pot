@@ -320,3 +320,16 @@ msgstr ""
 #: includes/class-paytrspi-checkout.php:608
 msgid "An error occurred when refunded. Reason;\n"
 msgstr ""
+
+
+msgid "Enable the old version of iFrame payment page;\n"
+msgstr ""
+
+msgid "Dark Mode For V2;\n"
+msgstr ""
+
+msgid "Enable dark theme for payment page for V2;\n"
+msgstr ""
+
+msgid "Vade Farkı"
+msgstr "Installment Difference;\n"

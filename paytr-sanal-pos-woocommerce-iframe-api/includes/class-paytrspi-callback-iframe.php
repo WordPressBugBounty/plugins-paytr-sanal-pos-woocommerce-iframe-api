@@ -34,7 +34,7 @@ class PaytrCheckoutCallbackIframe {
 				if ( $installment_dif > 0 ) {
 					if ( $options['paytr_ins_difference'] == 'yes' ) {
 						$installment_fee = new WC_Order_Item_Fee();
-						$installment_fee->set_name( __( 'Installment Difference', 'paytr-payment-gateway' ) );
+						$installment_fee->set_name( __( 'Vade Farkı', 'paytr-payment-gateway' ) );
 						$installment_fee->set_tax_status( 'none' );
 						$installment_fee->set_total( $installment_dif );
 						$order->add_item( $installment_fee );
@@ -42,7 +42,7 @@ class PaytrCheckoutCallbackIframe {
 						$order->calculate_totals();
 					}
 
-					$note .= 'Installment Difference: ' . wc_price( $installment_dif, array( 'currency' => $order->get_currency() ) ) . "\n";
+					$note .= 'Vade Farkı: ' . wc_price( $installment_dif, array( 'currency' => $order->get_currency() ) ) . "\n";
 				}
 
 				if ( array_key_exists( 'installment_count', $post ) ) {

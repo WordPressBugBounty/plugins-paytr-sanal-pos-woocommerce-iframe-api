@@ -24,10 +24,10 @@ class PaytrCoreClass {
         $merchant['user_name'] = sanitize_text_field(substr($order->get_billing_first_name() . ' ' . $order->get_billing_last_name(), 0, 60));
         $merchant['user_address'] = substr($order->get_billing_address_1() . ' ' . $order->get_billing_address_2() . ' ' . $order->get_billing_city() . ' ' . $get_country . ' ' . $order->get_billing_postcode(), 0, 300);
         $merchant['user_phone'] = sanitize_text_field(substr($order->get_billing_phone(), 0, 20));
-        if (isset($settings['iframe_version']) && $settings['iframe_version'] === 'yes') {
-            $iframe_v2 = 1;
-        } else {
+        if (isset($settings['iframe_old_version']) && $settings['iframe_old_version'] === 'yes') {
             $iframe_v2 = 0;
+        } else {
+            $iframe_v2 = 1;
         }
 
         if (isset($settings['iframe_theme']) && $settings['iframe_theme'] === 'yes') {
