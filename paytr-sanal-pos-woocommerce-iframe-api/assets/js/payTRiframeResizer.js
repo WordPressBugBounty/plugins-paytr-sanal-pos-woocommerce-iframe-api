@@ -42,6 +42,7 @@ window.onmessage = function(event) {
             setTimeout(function () {
                 if (event.data.type === "setHeight") {
                     document.getElementById("paytriframe").style.height = event.data.value;
+                    document.getElementById("paytriframe").setAttribute("scrolling", "no");
                 }
             }, 100);
             window.scrollTo(0, document.getElementById("paytriframe").getBoundingClientRect().top + window.pageYOffset - 10);

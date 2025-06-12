@@ -1,7 +1,7 @@
 === PayTR Sanal POS WooCommerce - iFrame API ===
 Contributors: paytrteknik
 Tags: PayTR, checkout, ödeme, WooCommerce, sanal pos
-Stable tag: 3.0.5
+Stable tag: 3.0.7
 Requires at least: 4.4
 Requires PHP: 5.6
 Tested up to: 6.8.1
@@ -53,6 +53,12 @@ PayTR ödeme çözümlerini tercih etmeniz için birkaç neden:
 **[PayTR Mağaza Paneli > Bilgi](https://www.paytr.com/magaza/bilgi)** sayfasında bulunan **API Entegrasyon Bilgileri** alanından ulaşabilirsiniz.
 
 == Changelog ==
+= 3.0.7 =
+* Update - bug fixs
+
+= 3.0.6 =
+* Update - bug fixs
+
 = 3.0.5 =
 * Update - iFrame Eski versiyon kullanımı tercihi eklenildi.
 
