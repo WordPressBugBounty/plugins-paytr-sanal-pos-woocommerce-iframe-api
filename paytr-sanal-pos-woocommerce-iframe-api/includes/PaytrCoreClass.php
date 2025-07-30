@@ -132,7 +132,7 @@ class PaytrCoreClass {
                 'currency' => $merchant['currency'],
                 'merchant_fail_url' => wc_get_cart_url(),
                 'iframe_v2' => $iframe_v2,
-				'iframe_v2_dark' => $iframe_v2_dark,
+		'iframe_v2_dark' => $iframe_v2_dark,
             );
             $post_data['merchant_ok_url'] = $order->get_checkout_order_received_url();
             if ($this->paytr_lang == 0) {
@@ -168,7 +168,7 @@ class PaytrCoreClass {
                 'timeout_limit'=> '30',
                 'test_mode' => $merchant['test_mode'],
                 'iframe_v2' => $iframe_v2,
-				'iframe_v2_dark' => $iframe_v2_dark,
+		'iframe_v2_dark' => $iframe_v2_dark,
             );
         }
         $wpCurlArgs = array(
@@ -220,7 +220,7 @@ class PaytrCoreClass {
             return new WP_Error('paytr_refund_error', __('PayTR Order number not found.', 'paytr-payment-gateway'));
         }
 
-        if ($order->get_status() !== 'completed') {
+        if ($order->get_status() !== 'completed' && $order->get_status() !== 'processing' ) {
             return new WP_Error('paytr_refund_error', __('The notification process has not been completed yet.', 'paytr-payment-gateway'));
         }
 
