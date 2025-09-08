@@ -132,7 +132,7 @@ class PaytrCoreClass {
                 'currency' => $merchant['currency'],
                 'merchant_fail_url' => wc_get_cart_url(),
                 'iframe_v2' => $iframe_v2,
-		'iframe_v2_dark' => $iframe_v2_dark,
+		        'iframe_v2_dark' => $iframe_v2_dark,
             );
             $post_data['merchant_ok_url'] = $order->get_checkout_order_received_url();
             if ($this->paytr_lang == 0) {
@@ -167,8 +167,6 @@ class PaytrCoreClass {
                 'debug_on' => $merchant['debug_on'],
                 'timeout_limit'=> '30',
                 'test_mode' => $merchant['test_mode'],
-                'iframe_v2' => $iframe_v2,
-		'iframe_v2_dark' => $iframe_v2_dark,
             );
         }
         $wpCurlArgs = array(
