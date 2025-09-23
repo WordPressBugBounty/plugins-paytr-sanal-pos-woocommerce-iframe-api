@@ -112,11 +112,11 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
                 'default' => __("Bu ödeme yöntemini seçtiğinizde Tüm Kredi Kartlarına taksit imkanı bulunmaktadır.", 'paytr-sanal-pos-woocommerce-iframe-api'),
                 'desc_tip' => true
             ),
-            'logo' => array(
-                'title' => __('Logo', 'paytr-sanal-pos-woocommerce-iframe-api'),
-                'label' => __('Enable/Disable', 'paytr-sanal-pos-woocommerce-iframe-api'),
-                'type' => 'checkbox',
-                'default' => 'no',
+            'logo'  => array(
+                'title'   => __( 'Logo', 'paytr-sanal-pos-woocommerce-iframe-api' ),
+                'label'   => __( 'Enable/Disable', 'paytr-sanal-pos-woocommerce-iframe-api' ),
+                'type'    => 'checkbox',
+                'default' => 'yes',
             ),
             'paytr_merchant_id' => array(
                 'title' => __('Merchant ID', 'paytr-sanal-pos-woocommerce-iframe-api'),
