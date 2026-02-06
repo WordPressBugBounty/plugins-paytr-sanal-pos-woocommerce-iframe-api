@@ -3,7 +3,7 @@
  * Plugin Name: PayTR Virtual POS WooCommerce - iFrame API
  * Plugin URI: https://wordpress.org/plugins/paytr-sanal-pos-woocommerce-iframe-api/
  * Description: The infrastructure required to receive payments through WooCommerce with your PayTR membership.
- * Version: 3.0.10
+ * Version: 3.1.0
  * Author: PayTR Ödeme ve Elektronik Para Kuruluşu A.Ş.
  * Author URI: http://www.paytr.com/
  * License: GPL v2 or later
@@ -18,10 +18,14 @@ if (!defined('ABSPATH')) {
 
 define('PAYTRSPI_PLUGIN_URL_2', untrailingslashit(plugins_url(basename(plugin_dir_path(__FILE__)), basename(__FILE__))));
 
+// Core sınıfları yükle
 require_once plugin_dir_path(__FILE__) . 'includes/PaytrCoreClass.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-paytr-log-manager.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-paytr-error-solutions.php';
+require_once plugin_dir_path(__FILE__) . 'includes/class-paytr-log-viewer.php';
 
-function woocommerce_paytr_payment_gateway()
-{
+// Ödeme gateway'lerini yükle
+function woocommerce_paytr_payment_gateway() {
     if ( !class_exists( 'WC_Payment_Gateway' ) ) return;
 
     require_once plugin_dir_path(__FILE__) . 'includes/class-paytr-payment-gateway-iframe.php';
@@ -34,16 +38,12 @@ function woocommerce_paytr_payment_gateway()
     }
     add_filter('woocommerce_payment_gateways', 'add_custom_gateway_class');
 
+    // Blocks desteği (mevcut kod)
     add_action( 'woocommerce_blocks_loaded', function (){
-        // Check if the required class exists
         if ( ! class_exists( 'Automattic\WooCommerce\Blocks\Payments\Integrations\AbstractPaymentMethodType' ) ) {
             return;
         }
-
-        // Include Blocks Checkout class
         require_once plugin_dir_path(__FILE__) . 'class-block.php';
-
-        // Hook the registration function to the 'woocommerce_blocks_payment_method_type_registration' action
         add_action(
             'woocommerce_blocks_payment_method_type_registration',
             function( Automattic\WooCommerce\Blocks\Payments\PaymentMethodRegistry $payment_method_registry ) {
@@ -61,3 +61,11 @@ function woocommerce_paytr_payment_gateway()
 }
 
 add_action('plugins_loaded', 'woocommerce_paytr_payment_gateway', 0);
+
+// Log görüntüleme AJAX işleyicisi
+function paytr_view_logs_ajax() {
+    $log_viewer = new PaytrLogViewer();
+    $log_viewer->display_logs_page();
+}
+
+add_action('wp_ajax_paytr_view_logs', 'paytr_view_logs_ajax');

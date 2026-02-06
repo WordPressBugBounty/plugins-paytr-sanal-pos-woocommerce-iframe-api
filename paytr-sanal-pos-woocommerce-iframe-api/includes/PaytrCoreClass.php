@@ -6,6 +6,15 @@ class PaytrCoreClass {
     public $paytr_lang;
     protected $category_full = array();
     protected $category_installment = array();
+    private $log_manager;
+
+    public function __construct() {
+        $this->log_manager = new PaytrLogManager();
+    }
+
+    public function log_error($message, $order_id = null, $transaction_id = null, $details = array()) {
+        return $this->log_manager->log_error($message, $order_id, $transaction_id, $details);
+    }
     public function receiptPage($order, $settings, $iframe = true)
     {
         $config = get_option('woocommerce_paytr_payment_gateway_settings');
@@ -24,12 +33,6 @@ class PaytrCoreClass {
         $merchant['user_name'] = sanitize_text_field(substr($order->get_billing_first_name() . ' ' . $order->get_billing_last_name(), 0, 60));
         $merchant['user_address'] = substr($order->get_billing_address_1() . ' ' . $order->get_billing_address_2() . ' ' . $order->get_billing_city() . ' ' . $get_country . ' ' . $order->get_billing_postcode(), 0, 300);
         $merchant['user_phone'] = sanitize_text_field(substr($order->get_billing_phone(), 0, 20));
-        if (isset($settings['iframe_old_version']) && $settings['iframe_old_version'] === 'yes') {
-            $iframe_v2 = 0;
-        } else {
-            $iframe_v2 = 1;
-        }
-
         if (isset($settings['iframe_theme']) && $settings['iframe_theme'] === 'yes') {
             $iframe_v2_dark = 1;
         } else {
@@ -131,7 +134,6 @@ class PaytrCoreClass {
                 'user_phone' => $merchant['user_phone'],
                 'currency' => $merchant['currency'],
                 'merchant_fail_url' => wc_get_cart_url(),
-                'iframe_v2' => $iframe_v2,
 		        'iframe_v2_dark' => $iframe_v2_dark,
             );
             $post_data['merchant_ok_url'] = $order->get_checkout_order_received_url();
@@ -185,8 +187,36 @@ class PaytrCoreClass {
             $order->update_status('wc-pending');
             $order->save();
         } else {
-            wp_die("PAYTR IFRAME failed. reason:" . $response['reason']);
+           
+        $error_details = array(
+            'kullanici_ip' => $merchant['user_ip'],
+            'paytr_token' => $paytr_token,
+            'tarih' => date('Y-m-d H:i:s'),
+            'order_details' => array(
+                'user_name' => $merchant['user_name'],
+                'user_phone' => $merchant['user_phone'],
+                'user_email' => $merchant['email'],
+                'user_address' => $merchant['user_address']
+            )
+        );
+        
+        $error_message = "İlgili işlem hata detayı - Sebep: " . $response['reason'];
+        $this->log_error($error_message, $order->get_id(), $merchant['merchant_oid'], $error_details);
+        
+        // Kullanıcı dostu hata mesajı
+        $user_friendly_message = $this->get_user_friendly_error($response['reason']);
+        
+        wp_die("
+            <div style='padding: 20px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 5px; max-width: 600px; margin: 20px auto;'>
+                <h3 style='color: #721c24; margin-top: 0;'>Ödeme İşlemi Hatası</h3>
+                <p><strong>Hata:</strong> " . $user_friendly_message . "</p>
+                <p><strong>Çözüm Önerisi:</strong> Lütfen ödeme sayfasına dönerek bilgilerinizi kontrol edin veya mağaza yöneticisi ile iletişime geçin.</p>
+                <button onclick='window.history.back()' style='background: #0073aa; color: white; border: none; padding: 10px 20px; border-radius: 3px; cursor: pointer;'>Geri Dön</button>
+            </div>
+        ");
+    
         }
+      
 
         wp_enqueue_script('script', PAYTRSPI_PLUGIN_URL_2 . '/assets/js/payTRiframeResizer.js', false, '2.0', true);
 
@@ -197,6 +227,24 @@ class PaytrCoreClass {
                 }, 1000);
             </script>';
     }
+private function get_user_friendly_error($reason) {
+    $error_mapping = array(
+        'user_phone' => 'Telefon numarası geçersiz veya eksik. Lütfen geçerli bir telefon numarası girin.',
+        'user_email' => 'E-posta adresi geçersiz veya eksik. Lütfen geçerli bir e-posta adresi girin.',
+        'user_name' => 'İsim ve soyisim bilgisi eksik. Lütfen tam adınızı girin.',
+        'user_address' => 'Adres bilgisi eksik. Lütfen tam adresinizi girin.',
+        'payment_amount' => 'Ödeme tutarı geçersiz. Lütfen sepetinizi kontrol edin.',
+        'merchant_oid' => 'Sipariş numarası oluşturulamadı. Lütfen tekrar deneyin.'
+    );
+    
+    foreach ($error_mapping as $key => $friendly_message) {
+        if (strpos($reason, $key) !== false) {
+            return $friendly_message;
+        }
+    }
+    
+    return 'Ödeme işlemi sırasında bir hata oluştu: ' . $reason;
+}
 
     public function processRefundPaytr($order_id, $amount = null, $reason = '')
     {

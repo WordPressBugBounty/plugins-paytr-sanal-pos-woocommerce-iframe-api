@@ -68,14 +68,11 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
                 'type' => 'title',
                 'description' => sprintf(__('You must add the following callback url <strong>%s</strong> to your <a href="https://www.paytr.com/magaza/ayarlar" target="_blank">Callback URL Settings.</a>'), get_home_url() . '/index.php?wc-api=wc_gateway_paytrcheckout')
             ),
-            'iframe_old_version' => array(
-            'title' => __('iFrame v1', 'paytr-sanal-pos-woocommerce-iframe-api'),
-    		'label' => __('Enable iFrame v1', 'paytr-sanal-pos-woocommerce-iframe-api'),
-    		'type' => 'checkbox',
-    		'default' => 'no',
-            'desc_tip' => true,
-    		'description' => __('Enable the old version of iFrame payment page', 'paytr-sanal-pos-woocommerce-iframe-api')
-            ),
+            'error_logs' => array(
+            'title' => __('Hata Geçmişi', 'paytr-sanal-pos-woocommerce-iframe-api'),
+            'type' => 'title',
+            'description' => $this->get_logs_viewer_html(),
+        ),
 
 			'iframe_theme' => array(
     		'title' => __('Dark Mode', 'paytr-sanal-pos-woocommerce-iframe-api'),
@@ -221,8 +218,20 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
                 $this->paytr_installment_list[$key] = ($this->get_option('paytr_installment_cat_' . $key) ? $this->get_option('paytr_installment_cat_' . $key) : 0);
             }
         }
+    
     }
-
+private function get_logs_viewer_html() {
+        ob_start();
+        ?>
+        <div>
+            <a href="<?php echo admin_url('admin-ajax.php'); ?>?action=paytr_view_logs&nonce=<?php echo wp_create_nonce('paytr_view_logs'); ?>" target="_blank" class="button button-secondary">
+                <?php _e('Hata Geçmişini Görüntüle', 'paytr-sanal-pos-woocommerce-iframe-api'); ?>
+            </a>
+            <p class="description"><?php _e('Son 7 günün hata loglarını görüntülemek için tıklayın.', 'paytr-sanal-pos-woocommerce-iframe-api'); ?></p>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
     public function paytr_receipt_page($order)
     {
         $this->core->receiptPage($order, $this->settings);
