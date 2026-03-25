@@ -53,6 +53,10 @@ PayTR ödeme çözümlerini tercih etmeniz için birkaç neden:
 **[PayTR Mağaza Paneli > Bilgi](https://www.paytr.com/magaza/bilgi)** sayfasında bulunan **API Entegrasyon Bilgileri** alanından ulaşabilirsiniz.
 
 == Changelog ==
+= 3.1.1 =
+* Update - Vade farkı vergi butonun aktifliğini kontrol ederek KDV hesaplamasını sağlıyor.
+
+
 = 3.1.0 =
 * Update - Hata Geçmişi eklendi, müşteriler tarafından karşılaşılan hatalar kayıt edilebiliyor.
 * Update - Ödeme sayfasında hata alan müşteriler için detaylı yönlendirmeler ve detaylı hata mesajları eklendi.
