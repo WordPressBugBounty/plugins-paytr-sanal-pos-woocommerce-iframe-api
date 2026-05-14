@@ -28,8 +28,10 @@ class PaytrCheckoutCallbackIframe {
 
 		$order_id = explode( 'PAYTRWOO', sanitize_text_field( $post['merchant_oid'] ) );
 		$order    = wc_get_order( $order_id[1] );
+		self::update_payment_attempt_from_callback( $order, $post );
 		if ( $order->get_status() == 'pending' or $order->get_status() == 'failed' ) {
 			if ( sanitize_text_field( $post['status'] ) == 'success' ) {
+				$order->update_meta_data( 'paytr_order_id', sanitize_text_field( $post['merchant_oid'] ) );
 				
 				wc_reduce_stock_levels( $order_id[1] );
 
@@ -94,5 +96,30 @@ class PaytrCheckoutCallbackIframe {
 
 		echo 'OK';
 		exit;
+	}
+
+	private static function update_payment_attempt_from_callback( $order, $post ) {
+		if ( ! $order ) {
+			return;
+		}
+
+		$attempts = $order->get_meta( 'paytr_payment_attempts' );
+		if ( ! is_array( $attempts ) ) {
+			return;
+		}
+
+		$merchant_oid = sanitize_text_field( $post['merchant_oid'] );
+		foreach ( $attempts as $key => $attempt ) {
+			if ( isset( $attempt['merchant_oid'] ) && $attempt['merchant_oid'] === $merchant_oid ) {
+				$attempts[$key]['callback_at'] = date( 'Y-m-d H:i:s' );
+				$attempts[$key]['callback_status'] = isset( $post['status'] ) ? sanitize_text_field( $post['status'] ) : '';
+				$attempts[$key]['payment_type'] = isset( $post['payment_type'] ) ? sanitize_text_field( $post['payment_type'] ) : '';
+				$attempts[$key]['total_amount'] = isset( $post['total_amount'] ) ? sanitize_text_field( $post['total_amount'] ) : '';
+				$attempts[$key]['payment_amount'] = isset( $post['payment_amount'] ) ? sanitize_text_field( $post['payment_amount'] ) : '';
+			}
+		}
+
+		$order->update_meta_data( 'paytr_payment_attempts', $attempts );
+		$order->save();
 	}
 }

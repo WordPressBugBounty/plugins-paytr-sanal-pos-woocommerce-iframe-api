@@ -55,12 +55,13 @@ class PaytrLogViewer {
 
         // Seçilen tarihin loglarını al (eğer silinmediyse)
         $selected_log_data = null;
-        $selected_date_file = $this->log_manager->get_log_dir() . '/gunluk-error-' . $selected_date . '.log';
+        $selected_date_files = $this->log_manager->get_log_files_by_date($selected_date);
         
-        if (file_exists($selected_date_file) && !isset($_GET['cleanup_selected'])) {
+        if (!empty($selected_date_files) && !isset($_GET['cleanup_selected'])) {
             $selected_log_data = array(
-                'file' => $selected_date_file,
-                'size' => $this->format_filesize(filesize($selected_date_file)),
+                'file' => $selected_date_files[0],
+                'files' => $selected_date_files,
+                'size' => $this->format_filesize($this->get_total_filesize($selected_date_files)),
                 'exists' => true
             );
         }
@@ -71,7 +72,7 @@ class PaytrLogViewer {
         $paginated_entries = array();
         
         if ($selected_log_data) {
-            $content = file_get_contents($selected_log_data['file']);
+            $content = $this->read_recent_log_content($selected_log_data['files'], 200);
             $all_entries = $this->parse_log_entries($content);
             $total_entries = count($all_entries);
             
@@ -82,6 +83,9 @@ class PaytrLogViewer {
 
         // Toplam sayfa sayısı
         $total_pages = ceil($total_entries / $per_page);
+        $solutions = $this->error_solutions->get_solutions();
+        $retention_days = $this->log_manager->get_max_log_days();
+        $summary_stats = $this->get_log_summary_stats($all_entries);
 
         ?>
         <!DOCTYPE html>
@@ -548,6 +552,257 @@ class PaytrLogViewer {
                         align-items: flex-start;
                     }
                 }
+                body {
+                    margin: 0;
+                    background: #f6f7f9;
+                    color: #1d2327;
+                    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+                }
+                .log-container {
+                    max-width: 1180px;
+                    margin: 0 auto;
+                    padding: 28px;
+                    background: transparent;
+                    box-shadow: none;
+                }
+                .paytr-page-header {
+                    display: flex;
+                    justify-content: space-between;
+                    gap: 20px;
+                    align-items: flex-start;
+                    margin-bottom: 18px;
+                }
+                .log-container > h1:first-child {
+                    display: none;
+                }
+                .paytr-page-header h1 {
+                    margin: 0 0 6px;
+                    font-size: 28px;
+                    line-height: 1.2;
+                    color: #111827;
+                }
+                .paytr-page-subtitle {
+                    margin: 0;
+                    color: #646970;
+                    font-size: 14px;
+                }
+                .paytr-retention-pill {
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 7px 11px;
+                    border-radius: 999px;
+                    background: #eef6ff;
+                    color: #0969a8;
+                    border: 1px solid #cde7ff;
+                    font-size: 12px;
+                    font-weight: 700;
+                    white-space: nowrap;
+                }
+                .paytr-summary-grid {
+                    display: grid;
+                    grid-template-columns: repeat(4, minmax(0, 1fr));
+                    gap: 12px;
+                    margin: 18px 0;
+                }
+                .paytr-summary-card {
+                    background: #fff;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    padding: 16px;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+                }
+                .paytr-summary-label {
+                    display: block;
+                    color: #646970;
+                    font-size: 12px;
+                    font-weight: 700;
+                    text-transform: uppercase;
+                    letter-spacing: .04em;
+                }
+                .paytr-summary-value {
+                    display: block;
+                    margin-top: 8px;
+                    font-size: 26px;
+                    font-weight: 750;
+                    color: #111827;
+                }
+                .cleanup-actions, .filters-container, .stats-container, .selected-date-actions, .pagination, .log-file {
+                    background: #fff;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 8px;
+                    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+                }
+                .cleanup-actions {
+                    padding: 16px;
+                    color: #1d2327;
+                    border-left: 4px solid #2271b1;
+                }
+                .cleanup-actions h3 {
+                    margin: 0 0 12px;
+                    color: #111827;
+                }
+                .cleanup-info {
+                    color: #646970;
+                }
+                .cleanup-btn, .filter-button, .delete-selected-btn, .solution-btn {
+                    border-radius: 6px;
+                    font-weight: 700;
+                    box-shadow: none;
+                    transform: none;
+                }
+                .cleanup-btn {
+                    background: #f6f7f9;
+                    color: #1d2327;
+                    border: 1px solid #dcdcde;
+                }
+                .cleanup-btn:hover {
+                    background: #eef6ff;
+                    color: #0969a8;
+                    border-color: #9ecff5;
+                }
+                .cleanup-btn.danger, .delete-selected-btn {
+                    background: #fff1f1;
+                    color: #b42318;
+                    border: 1px solid #ffd1d1;
+                }
+                .cleanup-btn.danger:hover, .delete-selected-btn:hover {
+                    background: #ffdede;
+                    color: #8a1f17;
+                }
+                .filters-container {
+                    padding: 16px;
+                }
+                .filter-item label {
+                    color: #3c434a;
+                }
+                .filter-select, .filter-input {
+                    border-radius: 6px;
+                    border-color: #c3c4c7;
+                    min-height: 36px;
+                }
+                .filter-button {
+                    background: #2271b1;
+                    min-height: 36px;
+                }
+                .filter-button:hover {
+                    background: #135e96;
+                }
+                .stats-container, .selected-date-actions {
+                    padding: 14px 16px;
+                    border-left: 4px solid #72aee6;
+                }
+                .stat-badge {
+                    border-radius: 999px;
+                    background: #f0f6fc;
+                    color: #0969a8;
+                }
+                .log-file {
+                    overflow: hidden;
+                }
+                .log-date {
+                    background: #111827;
+                    color: #fff;
+                    padding: 16px 18px;
+                }
+                .log-entry {
+                    padding: 18px;
+                    background: #fff;
+                    border-bottom: 1px solid #eef0f2;
+                }
+                .log-entry:hover {
+                    background: #fbfcfd;
+                }
+                .log-entry.is-success {
+                    border-left: 4px solid #00a32a;
+                }
+                .log-entry.is-error {
+                    border-left: 4px solid #d63638;
+                }
+                .log-entry.is-warning {
+                    border-left: 4px solid #dba617;
+                }
+                .paytr-status-badge {
+                    display: inline-flex;
+                    align-items: center;
+                    padding: 4px 9px;
+                    border-radius: 999px;
+                    font-size: 11px;
+                    font-weight: 800;
+                    text-transform: uppercase;
+                    letter-spacing: .04em;
+                    margin-right: 8px;
+                }
+                .paytr-status-badge.success {
+                    background: #edfaef;
+                    color: #008a20;
+                }
+                .paytr-status-badge.error {
+                    background: #fcf0f1;
+                    color: #b42318;
+                }
+                .paytr-status-badge.warning {
+                    background: #fff8e5;
+                    color: #8a5a00;
+                }
+                .log-timestamp, .log-order-info span {
+                    background: #f6f7f9;
+                    border: 1px solid #e5e7eb;
+                    border-radius: 999px;
+                    color: #3c434a;
+                    padding: 4px 8px;
+                }
+                .log-message {
+                    margin-top: 10px;
+                    font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+                    font-size: 13px;
+                    color: #111827;
+                }
+                .log-details {
+                    margin-top: 12px;
+                    background: #f8fafc;
+                    border: 1px solid #e5e7eb;
+                    border-left: 4px solid #72aee6;
+                    color: #334155;
+                    max-height: 260px;
+                    overflow: auto;
+                }
+                .solution-btn {
+                    margin-top: 12px;
+                    background: #2271b1;
+                    color: #fff;
+                    border: 1px solid #2271b1;
+                    padding: 8px 12px;
+                    font-size: 12px;
+                }
+                .solution-btn:hover {
+                    background: #135e96;
+                    color: #fff;
+                    box-shadow: none;
+                    transform: none;
+                }
+                .modal-content {
+                    border-radius: 8px;
+                    overflow: hidden;
+                }
+                .modal-header {
+                    background: #111827;
+                }
+                @media (max-width: 900px) {
+                    .paytr-summary-grid {
+                        grid-template-columns: repeat(2, minmax(0, 1fr));
+                    }
+                    .paytr-page-header {
+                        flex-direction: column;
+                    }
+                }
+                @media (max-width: 640px) {
+                    .log-container {
+                        padding: 16px;
+                    }
+                    .paytr-summary-grid {
+                        grid-template-columns: 1fr;
+                    }
+                }
             </style>
         </head>
         <body>
@@ -555,12 +810,39 @@ class PaytrLogViewer {
                 <h1>PayTR Hata Günlükleri</h1>
                 
                 <!-- Temizleme İşlemleri -->
+                <div class="paytr-page-header">
+                    <div>
+                        <h1>PayTR Hata Günlükleri</h1>
+                        <p class="paytr-page-subtitle">Ödeme, callback ve iade akışlarında oluşan kayıtarı tek ekrandan inceleyin.</p>
+                    </div>
+                    <span class="paytr-retention-pill"><?php echo esc_html($retention_days); ?> gun saklama</span>
+                </div>
+
+                <div class="paytr-summary-grid">
+                    <div class="paytr-summary-card">
+                        <span class="paytr-summary-label">Toplam Kayit</span>
+                        <span class="paytr-summary-value"><?php echo number_format($total_entries); ?></span>
+                    </div>
+                    <div class="paytr-summary-card">
+                        <span class="paytr-summary-label">Hata</span>
+                        <span class="paytr-summary-value"><?php echo number_format($summary_stats['error']); ?></span>
+                    </div>
+                    <div class="paytr-summary-card">
+                        <span class="paytr-summary-label">Başarılı</span>
+                        <span class="paytr-summary-value"><?php echo number_format($summary_stats['success']); ?></span>
+                    </div>
+                    <div class="paytr-summary-card">
+                        <span class="paytr-summary-label">Dosya Boyutu</span>
+                        <span class="paytr-summary-value"><?php echo $selected_log_data ? esc_html($selected_log_data['size']) : '0 B'; ?></span>
+                    </div>
+                </div>
+
                 <div class="cleanup-actions">
                     <h3>Log Yönetimi</h3>
                     <div class="cleanup-buttons">
                         <a href="<?php echo $this->build_pagination_url(1, array('cleanup_old' => 1)); ?>" 
                            class="cleanup-btn" 
-                           onclick="return confirm('7 günden eski tüm log dosyaları silinecek. Emin misiniz?')">
+                           onclick="return confirm('<?php echo esc_js($retention_days); ?> gunden eski tum log dosyalari silinecek. Emin misiniz?')">
                             Eski Logları Temizle
                         </a>
                         <a href="<?php echo $this->build_pagination_url(1, array('cleanup_all' => 1)); ?>" 
@@ -570,7 +852,7 @@ class PaytrLogViewer {
                         </a>
                     </div>
                     <div class="cleanup-info">
-                        <strong>Otomatik Temizleme:</strong> Log dosyaları otomatik olarak 7 gün saklanır, daha eski dosyalar silinir.
+                        <strong>Otomatik Temizleme:</strong> Log dosyalari secili ayara gore <?php echo esc_html($retention_days); ?> gun saklanir. Performans icin bu ekranda son 200 kayit gosterilir.
                     </div>
                 </div>
 
@@ -721,38 +1003,63 @@ class PaytrLogViewer {
                         </div>
                         <div class="log-content">
                             <?php foreach ($paginated_entries as $entry): ?>
-                                <div class="log-entry">
+                                <?php
+                                    try {
+                                        $entry_severity = $this->get_entry_severity($entry);
+                                ?>
+                                <div class="log-entry is-<?php echo esc_attr($entry_severity); ?>">
                                     <div class="log-entry-header">
-                                        <span class="log-timestamp"><?php echo $entry['timestamp']; ?></span>
-                                        <?php if ($entry['order_id']): ?>
+                                        <span>
+                                            <span class="paytr-status-badge <?php echo esc_attr($entry_severity); ?>"><?php echo esc_html($this->get_entry_severity_label($entry_severity)); ?></span>
+                                            <span class="log-timestamp"><?php echo esc_html(isset($entry['timestamp']) ? $entry['timestamp'] : ''); ?></span>
+                                        </span>
+                                        <?php if (!empty($entry['order_id'])): ?>
                                             <span class="log-order-info">
-                                                <?php if ($entry['transaction_id']): ?>
+                                                <?php if (!empty($entry['transaction_id'])): ?>
                                                     <span>İşlem ID: <?php echo $entry['transaction_id']; ?></span>
                                                 <?php endif; ?>
-                                                <?php if ($entry['order_id']): ?>
+                                                <?php if (!empty($entry['order_id'])): ?>
                                                     <span>Sipariş ID: <?php echo $entry['order_id']; ?></span>
                                                 <?php endif; ?>
                                             </span>
                                         <?php endif; ?>
                                     </div>
                                     <div class="log-message">
-                                        <?php echo htmlspecialchars($entry['message']); ?>
+                                        <?php echo esc_html(isset($entry['message']) ? $entry['message'] : ''); ?>
                                     </div>
                                     <?php if (!empty($entry['details'])): ?>
                                         <div class="log-details">
-                                            <?php echo htmlspecialchars($entry['details']); ?>
+                                            <?php echo esc_html($entry['details']); ?>
                                         </div>
                                     <?php endif; ?>
+                                    <?php if (!$this->is_success_entry($entry)): ?>
                                     <?php foreach ($solutions as $error_key => $solution_data): ?>
-                                        <?php if (strpos($entry['message'] . $entry['details'], $error_key) !== false): ?>
+                                        <?php if (strpos((isset($entry['message']) ? $entry['message'] : '') . (isset($entry['details']) ? $entry['details'] : ''), $error_key) !== false): ?>
                                             <button class="solution-btn" 
-                                                    onclick="showSolution('<?php echo htmlspecialchars($solution_data['title']); ?>', '<?php echo htmlspecialchars($solution_data['solution']); ?>')">
+                                                    onclick="showSolution('<?php echo esc_js($solution_data['title']); ?>', '<?php echo esc_js($solution_data['solution']); ?>')">
                                                 Çözüm Önerisi
                                             </button>
                                             <?php break; ?>
                                         <?php endif; ?>
                                     <?php endforeach; ?>
+                                    <?php endif; ?>
                                 </div>
+                                <?php
+                                    } catch (Throwable $e) {
+                                        error_log('PayTR Log Goruntuleme Hata: ' . $e->getMessage());
+                                ?>
+                                    <div class="log-entry is-error">
+                                        <div class="log-entry-header">
+                                            <span>
+                                                <span class="paytr-status-badge error">Hata</span>
+                                                <span class="log-timestamp"><?php echo esc_html(isset($entry['timestamp']) ? $entry['timestamp'] : date('Y-m-d H:i:s')); ?></span>
+                                            </span>
+                                        </div>
+                                        <div class="log-message">
+                                            Bu log kaydi beklenmeyen format nedeniyle tam olarak gosterilemedi. Ham kayit dosyasini kontrol edin.
+                                        </div>
+                                    </div>
+                                <?php } ?>
                             <?php endforeach; ?>
                         </div>
                     </div>
@@ -843,6 +1150,10 @@ class PaytrLogViewer {
 
                 // Sayfa yüklendiğinde ESC tuşu dinleyicisini ekle
                 document.addEventListener('DOMContentLoaded', function() {
+                    document.querySelectorAll('.cleanup-info').forEach(function(item) {
+                        item.innerHTML = '<strong>Otomatik Temizleme:</strong> Log dosyalari secili ayara gore <?php echo esc_js($retention_days); ?> gun saklanir. Performans icin bu ekranda son 200 kayit gosterilir.';
+                    });
+
                     document.addEventListener('keydown', function(event) {
                         if (event.key === 'Escape') {
                             closeSolution();
@@ -878,6 +1189,80 @@ class PaytrLogViewer {
         return admin_url('admin-ajax.php') . '?' . http_build_query($params);
     }
 
+    private function get_log_summary_stats($entries) {
+        $stats = array(
+            'success' => 0,
+            'error' => 0,
+            'warning' => 0,
+        );
+
+        foreach ($entries as $entry) {
+            $severity = $this->get_entry_severity($entry);
+            if (isset($stats[$severity])) {
+                $stats[$severity]++;
+            }
+        }
+
+        return $stats;
+    }
+
+    private function get_entry_severity($entry) {
+        $text = strtolower(remove_accents($entry['message'] . ' ' . $entry['details']));
+
+        if (strpos($text, 'hata') !== false || strpos($text, 'error') !== false || strpos($text, 'failed') !== false || strpos($text, '005') !== false || strpos($text, 'gonderilemedi') !== false || strpos($text, 'okunamadi') !== false) {
+            return 'error';
+        }
+
+        if (strpos($text, 'basarili') !== false || strpos($text, '"status":"success"') !== false || strpos($text, ' status: success') !== false) {
+            return 'success';
+        }
+
+        return 'warning';
+    }
+
+    private function get_entry_severity_label($severity) {
+        $labels = array(
+            'success' => 'Basarili',
+            'error' => 'Hata',
+            'warning' => 'Uyari',
+        );
+
+        return isset($labels[$severity]) ? $labels[$severity] : 'Kayit';
+    }
+
+    private function is_success_entry($entry) {
+        return $this->get_entry_severity($entry) === 'success';
+    }
+
+    private function read_recent_log_content($files, $entry_limit = 200) {
+        $files = is_array($files) ? $files : array($files);
+        $content = '';
+
+        foreach ($files as $file) {
+            if (!file_exists($file) || !is_readable($file)) {
+                continue;
+            }
+
+            $file_content = file_get_contents($file);
+            if ($file_content !== false) {
+                $content .= $file_content;
+            }
+        }
+
+        if ($content === false || trim($content) === '') {
+            return '';
+        }
+
+        $entries = preg_split('/-{50}\s*/', $content, -1, PREG_SPLIT_NO_EMPTY);
+        if (count($entries) <= $entry_limit) {
+            return $content;
+        }
+
+        $entries = array_slice($entries, -1 * $entry_limit);
+
+        return implode("--------------------------------------------------\n", $entries) . "--------------------------------------------------\n";
+    }
+
     /**
      * Log içeriğini ayrıştırır ve her bir girişi düzenler
      */
@@ -910,10 +1295,10 @@ class PaytrLogViewer {
                 ];
                 
                 // Order ID ve Transaction ID'yi çıkar
-                if (preg_match('/\[Sipariş ID: ([^\]]+)\]/', $line, $order_matches)) {
+                if (preg_match('/\[(?:Sipariş|Siparis) ID: ([^\]]+)\]/', $line, $order_matches)) {
                     $current_entry['order_id'] = $order_matches[1];
                 }
-                if (preg_match('/\[İşlem ID: ([^\]]+)\]/', $line, $transaction_matches)) {
+                if (preg_match('/\[(?:İşlem|Islem) ID: ([^\]]+)\]/', $line, $transaction_matches)) {
                     $current_entry['transaction_id'] = $transaction_matches[1];
                 }
                 
@@ -982,4 +1367,19 @@ class PaytrLogViewer {
             return $bytes . ' B';
         }
     }
+
+    private function get_total_filesize($files) {
+        $total_size = 0;
+
+        foreach ($files as $file) {
+            if (file_exists($file)) {
+                $total_size += filesize($file);
+            }
+        }
+
+        return $total_size;
+    }
 }
+
+
+

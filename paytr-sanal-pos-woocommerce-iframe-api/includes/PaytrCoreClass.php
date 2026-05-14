@@ -179,19 +179,89 @@ class PaytrCoreClass {
             'timeout' => 90,
         );
         $result = wp_remote_post('https://www.paytr.com/odeme/api/get-token', $wpCurlArgs);
+
+        if (is_wp_error($result)) {
+            $this->record_payment_attempt($order, array(
+                'merchant_oid' => $merchant['merchant_oid'],
+                'amount' => $merchant['payment_amount'],
+                'currency' => $merchant['currency'],
+                'test_mode' => $merchant['test_mode'],
+                'status' => 'request_error',
+                'reason' => $result->get_error_message(),
+                'http_code' => 0,
+            ));
+
+            $this->log_error('PAYTR odeme token istegi gonderilemedi - Sebep: ' . $result->get_error_message(), $order->get_id(), $merchant['merchant_oid'], array(
+                'kullanici_ip' => $merchant['user_ip'],
+                'wp_hata_kodu' => $result->get_error_code(),
+                'wp_hata_mesaji' => $result->get_error_message(),
+                'tarih' => date('Y-m-d H:i:s')
+            ));
+
+            wp_die("
+                <div style='padding: 20px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 5px; max-width: 600px; margin: 20px auto;'>
+                    <h3 style='color: #721c24; margin-top: 0;'>Odeme Islemi Hatasi</h3>
+                    <p><strong>Hata:</strong> PayTR odeme servisine ulasilamadi.</p>
+                    <p><strong>Cozum Onerisi:</strong> Lutfen daha sonra tekrar deneyin veya magaza yoneticisi ile iletisime gecin.</p>
+                    <button onclick='window.history.back()' style='background: #0073aa; color: white; border: none; padding: 10px 20px; border-radius: 3px; cursor: pointer;'>Geri Don</button>
+                </div>
+            ");
+        }
+
         $body = wp_remote_retrieve_body($result);
         $response = json_decode($body, 1);
-        if ($response['status'] == 'success') {
+
+        if (!is_array($response) || !isset($response['status'])) {
+            $this->record_payment_attempt($order, array(
+                'merchant_oid' => $merchant['merchant_oid'],
+                'amount' => $merchant['payment_amount'],
+                'currency' => $merchant['currency'],
+                'test_mode' => $merchant['test_mode'],
+                'status' => 'invalid_response',
+                'reason' => substr($body, 0, 200),
+                'http_code' => wp_remote_retrieve_response_code($result),
+            ));
+
+            $this->log_error('PAYTR odeme token cevabi okunamadi', $order->get_id(), $merchant['merchant_oid'], array(
+                'kullanici_ip' => $merchant['user_ip'],
+                'http_kodu' => wp_remote_retrieve_response_code($result),
+                'ham_cevap' => $body,
+                'tarih' => date('Y-m-d H:i:s')
+            ));
+
+            wp_die("
+                <div style='padding: 20px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 5px; max-width: 600px; margin: 20px auto;'>
+                    <h3 style='color: #721c24; margin-top: 0;'>Odeme Islemi Hatasi</h3>
+                    <p><strong>Hata:</strong> PayTR odeme cevabi okunamadi.</p>
+                    <p><strong>Cozum Onerisi:</strong> Lutfen daha sonra tekrar deneyin veya magaza yoneticisi ile iletisime gecin.</p>
+                    <button onclick='window.history.back()' style='background: #0073aa; color: white; border: none; padding: 10px 20px; border-radius: 3px; cursor: pointer;'>Geri Don</button>
+                </div>
+            ");
+        }
+
+        $this->record_payment_attempt($order, array(
+            'merchant_oid' => $merchant['merchant_oid'],
+            'amount' => $merchant['payment_amount'],
+            'currency' => $merchant['currency'],
+            'test_mode' => $merchant['test_mode'],
+            'status' => isset($response['status']) ? $response['status'] : 'invalid_response',
+            'reason' => isset($response['reason']) ? $response['reason'] : '',
+            'http_code' => wp_remote_retrieve_response_code($result),
+        ));
+
+        if ($response['status'] == 'success' && !empty($response['token'])) {
             $token = $response['token'];
-            $order->update_meta_data( 'paytr_order_id', $merchant['merchant_oid'] );
+            $order->update_meta_data( 'paytr_pending_order_id', $merchant['merchant_oid'] );
             $order->update_status('wc-pending');
             $order->save();
         } else {
+        $paytr_reason = isset($response['reason']) ? $response['reason'] : 'PayTR token cevabinda token bulunamadi.';
+        $response['reason'] = $paytr_reason;
            
         $error_details = array(
             'kullanici_ip' => $merchant['user_ip'],
-            'paytr_token' => $paytr_token,
             'tarih' => date('Y-m-d H:i:s'),
+            'paytr_cevabi' => $response,
             'order_details' => array(
                 'user_name' => $merchant['user_name'],
                 'user_phone' => $merchant['user_phone'],
@@ -201,10 +271,11 @@ class PaytrCoreClass {
         );
         
         $error_message = "İlgili işlem hata detayı - Sebep: " . $response['reason'];
+        $error_message = isset($paytr_reason) ? "PAYTR odeme token hatasi - Sebep: " . $paytr_reason : $error_message;
         $this->log_error($error_message, $order->get_id(), $merchant['merchant_oid'], $error_details);
         
         // Kullanıcı dostu hata mesajı
-        $user_friendly_message = $this->get_user_friendly_error($response['reason']);
+        $user_friendly_message = $this->get_user_friendly_error($paytr_reason);
         
         wp_die("
             <div style='padding: 20px; background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 5px; max-width: 600px; margin: 20px auto;'>
@@ -246,6 +317,32 @@ private function get_user_friendly_error($reason) {
     return 'Ödeme işlemi sırasında bir hata oluştu: ' . $reason;
 }
 
+    private function record_payment_attempt($order, $attempt) {
+        if (!$order) {
+            return;
+        }
+
+        $attempts = $order->get_meta('paytr_payment_attempts');
+        if (!is_array($attempts)) {
+            $attempts = array();
+        }
+
+        $attempts[] = array(
+            'created_at' => date('Y-m-d H:i:s'),
+            'merchant_oid' => isset($attempt['merchant_oid']) ? sanitize_text_field($attempt['merchant_oid']) : '',
+            'amount' => isset($attempt['amount']) ? sanitize_text_field($attempt['amount']) : '',
+            'currency' => isset($attempt['currency']) ? sanitize_text_field($attempt['currency']) : '',
+            'test_mode' => isset($attempt['test_mode']) ? intval($attempt['test_mode']) : 0,
+            'status' => isset($attempt['status']) ? sanitize_text_field($attempt['status']) : '',
+            'reason' => isset($attempt['reason']) ? sanitize_text_field($attempt['reason']) : '',
+            'http_code' => isset($attempt['http_code']) ? intval($attempt['http_code']) : 0,
+        );
+
+        $attempts = array_slice($attempts, -20);
+        $order->update_meta_data('paytr_payment_attempts', $attempts);
+        $order->save();
+    }
+
     public function processRefundPaytr($order_id, $amount = null, $reason = '')
     {
 
@@ -260,7 +357,7 @@ private function get_user_friendly_error($reason) {
 
         $order = new WC_Order( $order_id );
 
-        $merchant_oid = $order->get_meta('paytr_order_id');
+        $merchant_oid = $this->get_refund_merchant_oid($order);
 
         if (!$merchant_oid) {
             return new WP_Error('paytr_refund_error', __('PayTR Order number not found.', 'paytr-payment-gateway'));
@@ -283,6 +380,9 @@ private function get_user_friendly_error($reason) {
             'paytr_token' => $paytr_token
         );
 
+        $safe_post_data = $post_data;
+        unset($safe_post_data['paytr_token']);
+
         $wpCurlArgs = array(
             'method' => 'POST',
             'body' => $post_data,
@@ -293,8 +393,37 @@ private function get_user_friendly_error($reason) {
 
         $result = wp_remote_post('https://www.paytr.com/odeme/iade', $wpCurlArgs);
 
+        if (is_wp_error($result)) {
+            $refund_log_details = array(
+                'siparis_durumu' => $order->get_status(),
+                'iade_istegi' => $safe_post_data,
+                'wp_hata_kodu' => $result->get_error_code(),
+                'wp_hata_mesaji' => $result->get_error_message(),
+                'tarih' => date('Y-m-d H:i:s')
+            );
+
+            $this->log_error('PAYTR iade istegi gonderilemedi - Sebep: ' . $result->get_error_message(), $order->get_id(), $merchant_oid, $refund_log_details);
+
+            return new WP_Error('paytr_refund_error', __('An error occurred when refunded. Reason;' . "\n" . $result->get_error_message(), 'paytr-payment-gateway'));
+        }
+
         $body = wp_remote_retrieve_body($result);
         $response = json_decode($body, 1);
+
+        $refund_log_details = array(
+            'siparis_durumu' => $order->get_status(),
+            'iade_istegi' => $safe_post_data,
+            'http_kodu' => wp_remote_retrieve_response_code($result),
+            'paytr_cevabi' => $response,
+            'ham_cevap' => $body,
+            'tarih' => date('Y-m-d H:i:s')
+        );
+
+        if (!is_array($response) || !isset($response['status'])) {
+            $this->log_error('PAYTR iade cevabi okunamadi', $order->get_id(), $merchant_oid, $refund_log_details);
+
+            return new WP_Error('paytr_refund_error', __('An error occurred when refunded. Reason;' . "\n" . 'PayTR response could not be read.', 'paytr-payment-gateway'));
+        }
 
         if (sanitize_text_field($response['status']) == 'success') {
 
@@ -302,20 +431,96 @@ private function get_user_friendly_error($reason) {
             $note = __('PAYTR NOTIFICATION - Refund', 'paytr-payment-gateway') . "\n";
             $note .= __('Status', 'paytr-payment-gateway') . ': ' . $response['status'] . "\n";
             $note .= __('PayTR Order ID', 'paytr-payment-gateway') . ': <a href="https://www.paytr.com/magaza/satislar?merchant_oid=' . $merchant_oid . '" target="_blank">' . $merchant_oid . '</a>' . "\n";
-            $note .= __('Refund Amount', 'paytr-payment-gateway') . ': ' . wc_price($response['return_amount'], array('currency' => $order->get_currency())) . "\n";
+            $return_amount = isset($response['return_amount']) ? $response['return_amount'] : $amount;
+            $note .= __('Refund Amount', 'paytr-payment-gateway') . ': ' . wc_price($return_amount, array('currency' => $order->get_currency())) . "\n";
 
             if ($reason != '') {
                 $note .= 'Reason of Refund : ' . $reason;
             }
 
             $order->add_order_note($note);
+            $this->log_error('PAYTR iade islemi basarili', $order->get_id(), $merchant_oid, $refund_log_details);
 
             return true;
         } else {
-            $note = $response['status'] . ' - ' . $response['err_no'] . ' - ' . $response['err_msg'];
+            $err_no = isset($response['err_no']) ? $response['err_no'] : 'unknown';
+            $err_msg = isset($response['err_msg']) ? $response['err_msg'] : 'PayTR refund error message is empty.';
+            $note = $response['status'] . ' - ' . $err_no . ' - ' . $err_msg;
+            $this->log_error('PAYTR iade islemi hatasi - Sebep: ' . $note, $order->get_id(), $merchant_oid, $refund_log_details);
 
             return new WP_Error('paytr_refund_error', __('An error occurred when refunded. Reason;' . "\n" . $note, 'paytr-payment-gateway'));
         }
+    }
+
+    private function get_refund_merchant_oid($order) {
+        $stored_merchant_oid = $order->get_meta('paytr_order_id');
+        $confirmed_merchant_oid = $this->get_successful_payment_merchant_oid($order);
+
+        if ($confirmed_merchant_oid && $confirmed_merchant_oid !== $stored_merchant_oid) {
+            $order->update_meta_data('paytr_order_id', $confirmed_merchant_oid);
+            $order->save();
+
+            $this->log_error('PAYTR iade merchant_oid eslesmesi duzeltildi', $order->get_id(), $confirmed_merchant_oid, array(
+                'eski_paytr_order_id' => $stored_merchant_oid,
+                'dogru_paytr_order_id' => $confirmed_merchant_oid,
+                'kaynak' => 'basarili_odeme_bildirimi',
+                'tarih' => date('Y-m-d H:i:s')
+            ));
+        }
+
+        return $confirmed_merchant_oid ? $confirmed_merchant_oid : $stored_merchant_oid;
+    }
+
+    private function get_successful_payment_merchant_oid($order) {
+        $attempt_oid = $this->get_successful_payment_attempt_merchant_oid($order);
+        if ($attempt_oid) {
+            return $attempt_oid;
+        }
+
+        return $this->get_successful_payment_note_merchant_oid($order);
+    }
+
+    private function get_successful_payment_attempt_merchant_oid($order) {
+        $attempts = $order->get_meta('paytr_payment_attempts');
+        if (!is_array($attempts)) {
+            return null;
+        }
+
+        foreach (array_reverse($attempts) as $attempt) {
+            $callback_status = isset($attempt['callback_status']) ? $attempt['callback_status'] : '';
+            $merchant_oid = isset($attempt['merchant_oid']) ? $attempt['merchant_oid'] : '';
+
+            if ($callback_status === 'success' && $merchant_oid) {
+                return sanitize_text_field($merchant_oid);
+            }
+        }
+
+        return null;
+    }
+
+    private function get_successful_payment_note_merchant_oid($order) {
+        if (!function_exists('wc_get_order_notes')) {
+            return null;
+        }
+
+        $notes = wc_get_order_notes(array(
+            'order_id' => $order->get_id(),
+            'limit' => 50,
+        ));
+
+        foreach ($notes as $note) {
+            $content = isset($note->content) ? wp_strip_all_tags($note->content) : '';
+
+            if (stripos($content, 'PAYTR NOTIFICATION') === false || stripos($content, 'Payment Accepted') === false) {
+                continue;
+            }
+
+            if (preg_match('/(\d+PAYTRWOO' . preg_quote((string) $order->get_id(), '/') . ')/', $content, $matches)) {
+                return sanitize_text_field($matches[1]);
+            }
+        }
+
+        return null;
     }
 
     public function categoryParserProd()

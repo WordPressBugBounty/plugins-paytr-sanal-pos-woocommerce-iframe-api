@@ -27,6 +27,7 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
             'plugin_action_links'
         ));
         add_filter('plugin_row_meta', array($this, 'plugin_row_meta'), 10, 2);
+        add_action('admin_notices', array($this, 'display_test_mode_notice'));
         $get_pspi_options = get_option('woocommerce_paytr_payment_gateway_settings');
 
         if ($get_pspi_options != '' && $get_pspi_options['logo'] === 'yes') {
@@ -73,6 +74,11 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
             'type' => 'title',
             'description' => $this->get_logs_viewer_html(),
         ),
+            'mode_status' => array(
+                'title' => __('Canli/Test Modu', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'type' => 'title',
+                'description' => $this->get_mode_warning_html(),
+            ),
 
 			'iframe_theme' => array(
     		'title' => __('Dark Mode', 'paytr-sanal-pos-woocommerce-iframe-api'),
@@ -93,6 +99,65 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
                 'label' => __('Test Mode', 'paytr-sanal-pos-woocommerce-iframe-api'),
                 'type' => 'checkbox',
                 'default' => 'no',
+            ),
+            'paytr_log_retention_days' => array(
+                'title' => __('Log Saklama Suresi', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'type' => 'select',
+                'default' => '7',
+                'description' => __('PayTR hata gunluklerinin otomatik temizleme suresini belirler.', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'options' => array(
+                    '7' => __('7 gun', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '14' => __('14 gun', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '30' => __('30 gun', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '60' => __('60 gun', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                ),
+            ),
+            'paytr_log_level' => array(
+                'title' => __('Log Seviyesi', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'type' => 'select',
+                'default' => 'errors',
+                'description' => __('Yuksek trafikli magazalarda varsayilan olarak sadece hatalarin loglanmasi onerilir.', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'options' => array(
+                    'off' => __('Kapali', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    'errors' => __('Sadece hatalar', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    'refunds' => __('Hatalar + iadeler', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    'all' => __('Tum PayTR olaylari', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                ),
+            ),
+            'paytr_log_max_file_size_mb' => array(
+                'title' => __('Gunluk Log Dosyasi Limiti', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'type' => 'select',
+                'default' => '5',
+                'description' => __('Gunluk log dosyasi bu limite ulasinca ayni gun icin yeni dosyada olusturulmaya devam eder.', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'options' => array(
+                    '1' => __('1 MB', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '5' => __('5 MB', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '10' => __('10 MB', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '25' => __('25 MB', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                ),
+            ),
+            'paytr_error_email_alerts' => array(
+                'title' => __('Hata E-posta Bildirimi', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'type' => 'select',
+                'default' => 'yes',
+                'description' => __('Ayni hata 30 dakika icinde 3 kez kaydedilirse WordPress admin e-posta adresine bildirim gonderilir.', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'options' => array(
+                    'yes' => __('Aktif', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    'no' => __('Kapali', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                ),
+            ),
+            'paytr_error_email_hourly_limit' => array(
+                'title' => __('Saatlik E-posta Limiti', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'type' => 'select',
+                'default' => '5',
+                'description' => __('Hata e-posta bildirimi aktifken bir saat icinde en fazla kac bildirim gonderilecegini belirler.', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                'options' => array(
+                    '1' => __('Saatte en fazla 1 e-posta', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '2' => __('Saatte en fazla 2 e-posta', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '3' => __('Saatte en fazla 3 e-posta', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '4' => __('Saatte en fazla 4 e-posta', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                    '5' => __('Saatte en fazla 5 e-posta', 'paytr-sanal-pos-woocommerce-iframe-api'),
+                ),
             ),
             'title' => array(
                 'title' => __('Title', 'paytr-sanal-pos-woocommerce-iframe-api'),
@@ -221,17 +286,60 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
     
     }
 private function get_logs_viewer_html() {
+        $settings = get_option('woocommerce_paytr_payment_gateway_settings', array());
+        $retention_days = isset($settings['paytr_log_retention_days']) ? intval($settings['paytr_log_retention_days']) : 7;
+
+        return '<div>
+            <a href="' . admin_url('admin-ajax.php') . '?action=paytr_view_logs&nonce=' . wp_create_nonce('paytr_view_logs') . '" target="_blank" class="button button-secondary">' . __('Hata Gecmisini Goruntule', 'paytr-sanal-pos-woocommerce-iframe-api') . '</a>
+            <p class="description">' . sprintf(__('Son %d gunun hata loglarini goruntulemek icin tiklayin.', 'paytr-sanal-pos-woocommerce-iframe-api'), $retention_days) . '</p>
+        </div>';
+
         ob_start();
+        $settings = get_option('woocommerce_paytr_payment_gateway_settings', array());
+        $retention_days = isset($settings['paytr_log_retention_days']) ? intval($settings['paytr_log_retention_days']) : 7;
         ?>
         <div>
             <a href="<?php echo admin_url('admin-ajax.php'); ?>?action=paytr_view_logs&nonce=<?php echo wp_create_nonce('paytr_view_logs'); ?>" target="_blank" class="button button-secondary">
                 <?php _e('Hata Geçmişini Görüntüle', 'paytr-sanal-pos-woocommerce-iframe-api'); ?>
             </a>
-            <p class="description"><?php _e('Son 7 günün hata loglarını görüntülemek için tıklayın.', 'paytr-sanal-pos-woocommerce-iframe-api'); ?></p>
+            <p class="description"><?php printf(esc_html__('Son %d gunun hata loglarini goruntulemek icin tiklayin.', 'paytr-sanal-pos-woocommerce-iframe-api'), $retention_days); ?></p>
         </div>
         <?php
         return ob_get_clean();
     }
+
+    private function get_mode_warning_html() {
+        $settings = get_option('woocommerce_paytr_payment_gateway_settings', array());
+        $test_mode_enabled = isset($settings['test']) && $settings['test'] === 'yes';
+
+        if ($test_mode_enabled) {
+            return '<div style="padding:10px 12px;background:#fff3cd;border-left:4px solid #dba617;color:#664d03;"><strong>Test modu aktif.</strong> Gercek kart tahsilati icin canli moda gecmeden once bu ayari kapatin.</div>';
+        }
+
+        return '<div style="padding:10px 12px;background:#d1e7dd;border-left:4px solid #198754;color:#0f5132;"><strong>Canli mod aktif.</strong> Islemler gercek odeme akisi uzerinden calisir.</div>';
+    }
+
+    public function display_test_mode_notice() {
+        if (!current_user_can('manage_woocommerce')) {
+            return;
+        }
+
+        $screen = function_exists('get_current_screen') ? get_current_screen() : null;
+        if (!$screen || $screen->id !== 'woocommerce_page_wc-settings') {
+            return;
+        }
+
+        if (!isset($_GET['section']) || sanitize_text_field($_GET['section']) !== $this->id) {
+            return;
+        }
+
+        if ($this->get_option('test') !== 'yes') {
+            return;
+        }
+
+        echo '<div class="notice notice-warning"><p><strong>PayTR test modu aktif.</strong> Canli tahsilat almadan once test modunu kapattiginizdan emin olun.</p></div>';
+    }
+
     public function paytr_receipt_page($order)
     {
         $this->core->receiptPage($order, $this->settings);
