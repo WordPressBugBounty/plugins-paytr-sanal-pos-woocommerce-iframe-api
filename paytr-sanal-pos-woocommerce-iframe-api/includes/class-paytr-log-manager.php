@@ -1,21 +1,14 @@
 <?php
 
 class PaytrLogManager {
-    private $log_dir;
+    private $store;
     private $max_log_days = 7;
 
     public function __construct() {
-        $upload_dir = wp_upload_dir();
-        $this->log_dir = $upload_dir['basedir'] . '/paytr-logs';
+        require_once __DIR__ . '/class-paytr-log-store.php';
+        $this->store = new PaytrLogStore();
         $this->max_log_days = $this->get_configured_max_log_days();
-        $this->ensure_log_directory_exists();
         $this->cleanup_old_logs();
-    }
-
-    private function ensure_log_directory_exists() {
-        if (!file_exists($this->log_dir)) {
-            wp_mkdir_p($this->log_dir);
-        }
     }
 
     public function log_error($message, $order_id = null, $transaction_id = null, $details = array()) {
@@ -24,7 +17,6 @@ class PaytrLogManager {
                 return true;
             }
 
-            $log_file = $this->get_writable_log_file();
             $log_message = '[' . date('Y-m-d H:i:s') . ']';
 
             if ($transaction_id) {
@@ -45,179 +37,65 @@ class PaytrLogManager {
 
             $log_message .= "--------------------------------------------------\n";
 
-            file_put_contents($log_file, $log_message, FILE_APPEND | LOCK_EX);
+            if (!$this->store->append(date('Y-m-d'), $log_message)) {
+                return false;
+            }
             $this->maybe_send_repeated_error_notification($message, $order_id, $transaction_id, $details);
 
             return true;
         } catch (Exception $e) {
-            error_log('PayTR Log Hatasi: ' . $e->getMessage());
+            error_log('PayTR log kaydi yazilamadi.');
             return false;
         }
     }
 
+    // REVIEW WP-08: Panel ayni arayuzu kullanir; dosya yollarinin yerine DB gun anahtarlari doner.
     public function get_log_files($days = 7) {
-        $log_files = array();
-        $available_dates = array();
-
-        if (file_exists($this->log_dir)) {
-            foreach (scandir($this->log_dir) as $file) {
-                if (preg_match('/^gunluk-error-(\d{4}-\d{2}-\d{2})(?:-\d+)?\.log$/', $file, $matches)) {
-                    $file_date = $matches[1];
-                    $file_path = $this->log_dir . '/' . $file;
-
-                    if (file_exists($file_path) && is_readable($file_path)) {
-                        $available_dates[$file_date] = $file_date;
-                    }
-                }
-            }
-
-            $available_dates = array_values($available_dates);
-            rsort($available_dates);
-            $available_dates = array_slice($available_dates, 0, $days);
-
-            foreach ($available_dates as $date) {
-                $date_files = $this->get_log_files_by_date($date);
-                if (!empty($date_files)) {
-                    $log_files[$date] = array(
-                        'file' => $date_files[0],
-                        'files' => $date_files,
-                        'size' => $this->format_filesize($this->get_total_filesize($date_files)),
-                    );
-                }
-            }
+        $logs = array();
+        foreach ($this->store->dates($days) as $date) {
+            $key = 'paytr-db:' . $date;
+            $logs[$date] = array('file' => $key, 'files' => array($key),
+                'size' => $this->format_filesize($this->store->size($date)));
         }
-
-        return $log_files;
+        return $logs;
     }
 
     public function get_log_files_by_date($date) {
-        $date = preg_replace('/[^0-9-]/', '', $date);
-        $files = array();
-
-        if (!file_exists($this->log_dir)) {
-            return $files;
-        }
-
-        foreach (scandir($this->log_dir) as $file) {
-            if (preg_match('/^gunluk-error-' . preg_quote($date, '/') . '(?:-(\d+))?\.log$/', $file, $matches)) {
-                $file_path = $this->log_dir . '/' . $file;
-                if (file_exists($file_path) && is_readable($file_path)) {
-                    $suffix = isset($matches[1]) && $matches[1] !== '' ? intval($matches[1]) : 1;
-                    $files[$suffix] = $file_path;
-                }
-            }
-        }
-
-        ksort($files, SORT_NUMERIC);
-
-        return array_values($files);
+        return $this->store->size($date) > 0 ? array('paytr-db:' . $date) : array();
     }
 
     public function delete_log_by_date($date) {
-        try {
-            $deleted_count = 0;
-
-            foreach ($this->get_log_files_by_date($date) as $log_file) {
-                if (file_exists($log_file) && unlink($log_file)) {
-                    $deleted_count++;
-                }
-            }
-
-            if ($deleted_count > 0) {
-                error_log('PayTR Log Silme: ' . $date . ' tarihli ' . $deleted_count . ' log dosyasi silindi.');
-                return true;
-            }
-
-            return false;
-        } catch (Exception $e) {
-            error_log('PayTR Log Silme Hatasi: ' . $e->getMessage());
-            return false;
-        }
+        return $this->store->delete_date($date) > 0;
     }
 
     public function cleanup_old_logs() {
-        try {
-            if (!file_exists($this->log_dir)) {
-                return 0;
-            }
-
-            $deleted_count = 0;
-            $cutoff_date = date('Y-m-d', strtotime('-' . $this->max_log_days . ' days'));
-            $cutoff_timestamp = strtotime($cutoff_date);
-
-            foreach (scandir($this->log_dir) as $file) {
-                if ($file === '.' || $file === '..') {
-                    continue;
-                }
-
-                if (preg_match('/^gunluk-error-(\d{4}-\d{2}-\d{2})(?:-\d+)?\.log$/', $file, $matches)) {
-                    $file_timestamp = strtotime($matches[1]);
-                    $file_path = $this->log_dir . '/' . $file;
-
-                    if ($file_timestamp < $cutoff_timestamp && unlink($file_path)) {
-                        $deleted_count++;
-                    }
-                }
-            }
-
-            if ($deleted_count > 0) {
-                error_log('PayTR Log Temizleme: ' . $deleted_count . ' eski log dosyasi silindi.');
-            }
-
-            return $deleted_count;
-        } catch (Exception $e) {
-            error_log('PayTR Log Temizleme Hatasi: ' . $e->getMessage());
-            return false;
-        }
+        return $this->store->cleanup(date('Y-m-d', strtotime('-' . $this->max_log_days . ' days')));
     }
 
     public function cleanup_all_logs() {
-        try {
-            if (!file_exists($this->log_dir)) {
-                return 0;
-            }
-
-            $deleted_count = 0;
-
-            foreach (scandir($this->log_dir) as $file) {
-                if ($file === '.' || $file === '..') {
-                    continue;
-                }
-
-                if (preg_match('/^gunluk-error-(\d{4}-\d{2}-\d{2})(?:-\d+)?\.log$/', $file)) {
-                    $file_path = $this->log_dir . '/' . $file;
-                    if (unlink($file_path)) {
-                        $deleted_count++;
-                    }
-                }
-            }
-
-            return $deleted_count;
-        } catch (Exception $e) {
-            error_log('PayTR Tum Loglari Temizleme Hatasi: ' . $e->getMessage());
-            return false;
-        }
+        return $this->store->cleanup();
     }
 
     public function get_log_content($date) {
-        $content = '';
+        return $this->store->read($date);
+    }
 
-        foreach ($this->get_log_files_by_date($date) as $log_file) {
-            $file_content = file_get_contents($log_file);
-            if ($file_content !== false) {
-                $content .= $file_content;
-            }
-        }
+    public function read_log_file($key, $limit = null) {
+        return is_string($key) && strpos($key, 'paytr-db:') === 0
+            ? $this->store->read(substr($key, 9), $limit) : false;
+    }
 
-        return $content !== '' ? $content : false;
+    public function get_log_file_size($key) {
+        return is_string($key) && strpos($key, 'paytr-db:') === 0
+            ? $this->store->size(substr($key, 9)) : 0;
     }
 
     public function log_exists($date) {
-        return !empty($this->get_log_files_by_date($date));
+        return $this->store->size($date) > 0;
     }
 
     public function get_log_dir() {
-        return $this->log_dir;
+        return ''; // Artik dosya tabanli bir log dizini yok.
     }
 
     public function set_max_log_days($days) {
@@ -265,33 +143,6 @@ class PaytrLogManager {
         $normalized_message = strtolower(remove_accents($message));
 
         return strpos($normalized_message, 'iade') !== false || strpos($normalized_message, 'refund') !== false;
-    }
-
-    private function get_max_file_size_bytes() {
-        $settings = get_option('woocommerce_paytr_payment_gateway_settings', array());
-        $size_mb = isset($settings['paytr_log_max_file_size_mb']) ? intval($settings['paytr_log_max_file_size_mb']) : 5;
-        $size_mb = max(1, min(25, $size_mb));
-
-        return $size_mb * 1024 * 1024;
-    }
-
-    private function get_writable_log_file() {
-        $date = date('Y-m-d');
-        $max_size = $this->get_max_file_size_bytes();
-        $base_file = $this->log_dir . '/gunluk-error-' . $date . '.log';
-
-        if (!file_exists($base_file) || filesize($base_file) < $max_size) {
-            return $base_file;
-        }
-
-        for ($index = 2; $index <= 99; $index++) {
-            $rotated_file = $this->log_dir . '/gunluk-error-' . $date . '-' . $index . '.log';
-            if (!file_exists($rotated_file) || filesize($rotated_file) < $max_size) {
-                return $rotated_file;
-            }
-        }
-
-        return $this->log_dir . '/gunluk-error-' . $date . '-99.log';
     }
 
     private function prepare_details_for_logging($details) {
@@ -394,7 +245,7 @@ class PaytrLogManager {
             return;
         }
 
-        $error_key = md5($this->normalize_error_message($message));
+        $error_key = hash('sha256', $this->normalize_error_message($message));
         $count_key = 'paytr_error_count_' . $error_key;
         $sent_key = 'paytr_error_sent_' . $error_key;
         $count = intval(get_transient($count_key)) + 1;

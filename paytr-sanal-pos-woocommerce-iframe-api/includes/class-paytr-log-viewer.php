@@ -11,7 +11,7 @@ class PaytrLogViewer {
 
     public function display_logs_page() {
         // Güvenlik kontrolü
-        if (!wp_verify_nonce($_GET['nonce'], 'paytr_view_logs') || !current_user_can('manage_woocommerce')) {
+        if (!current_user_can('manage_woocommerce') || !isset($_GET['nonce']) || !is_string($_GET['nonce']) || !wp_verify_nonce($_GET['nonce'], 'paytr_view_logs')) {
             wp_die('Güvenlik hatası!');
         }
 
@@ -1239,11 +1239,7 @@ class PaytrLogViewer {
         $content = '';
 
         foreach ($files as $file) {
-            if (!file_exists($file) || !is_readable($file)) {
-                continue;
-            }
-
-            $file_content = file_get_contents($file);
+            $file_content = $this->log_manager->read_log_file($file, $entry_limit);
             if ($file_content !== false) {
                 $content .= $file_content;
             }
@@ -1372,9 +1368,7 @@ class PaytrLogViewer {
         $total_size = 0;
 
         foreach ($files as $file) {
-            if (file_exists($file)) {
-                $total_size += filesize($file);
-            }
+            $total_size += $this->log_manager->get_log_file_size($file);
         }
 
         return $total_size;

@@ -124,18 +124,6 @@ class Paytr_Payment_Gateway extends WC_Payment_Gateway {
                     'all' => __('Tum PayTR olaylari', 'paytr-sanal-pos-woocommerce-iframe-api'),
                 ),
             ),
-            'paytr_log_max_file_size_mb' => array(
-                'title' => __('Gunluk Log Dosyasi Limiti', 'paytr-sanal-pos-woocommerce-iframe-api'),
-                'type' => 'select',
-                'default' => '5',
-                'description' => __('Gunluk log dosyasi bu limite ulasinca ayni gun icin yeni dosyada olusturulmaya devam eder.', 'paytr-sanal-pos-woocommerce-iframe-api'),
-                'options' => array(
-                    '1' => __('1 MB', 'paytr-sanal-pos-woocommerce-iframe-api'),
-                    '5' => __('5 MB', 'paytr-sanal-pos-woocommerce-iframe-api'),
-                    '10' => __('10 MB', 'paytr-sanal-pos-woocommerce-iframe-api'),
-                    '25' => __('25 MB', 'paytr-sanal-pos-woocommerce-iframe-api'),
-                ),
-            ),
             'paytr_error_email_alerts' => array(
                 'title' => __('Hata E-posta Bildirimi', 'paytr-sanal-pos-woocommerce-iframe-api'),
                 'type' => 'select',

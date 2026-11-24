@@ -25,11 +25,11 @@ class PaytrCoreClass {
         $order = wc_get_order( $order );
         $country = sanitize_text_field($order->get_billing_country());
         $get_country = sanitize_text_field(WC()->countries->get_states($country)[sanitize_text_field($order->get_billing_state())]);
-        $merchant['merchant_oid'] = time() . 'PAYTRWOO' . $order->get_id();
+        $merchant['merchant_oid'] = time() . wp_generate_password(12, false, false) . 'PAYTRWOO' . $order->get_id();
         $merchant['user_ip'] = $this->GetIP();
         $merchant['test_mode'] = $settings['test'] === 'yes' ? 1 : 0;
         $merchant['email'] = sanitize_email(substr($order->get_billing_email(), 0, 100));
-        $merchant['payment_amount'] = $order->get_total() * 100;
+        $merchant['payment_amount'] = (string) intval(round((float) wc_format_decimal($order->get_total(), 2) * 100));
         $merchant['user_name'] = sanitize_text_field(substr($order->get_billing_first_name() . ' ' . $order->get_billing_last_name(), 0, 60));
         $merchant['user_address'] = substr($order->get_billing_address_1() . ' ' . $order->get_billing_address_2() . ' ' . $order->get_billing_city() . ' ' . $get_country . ' ' . $order->get_billing_postcode(), 0, 300);
         $merchant['user_phone'] = sanitize_text_field(substr($order->get_billing_phone(), 0, 20));
@@ -110,7 +110,7 @@ class PaytrCoreClass {
             $merchant['no_installment'] = ($merchant['max_installment'] == 1) ? 1 : 0;
         }
         $merchant['debug_on'] = 1;
-        $merchant['currency'] = strtoupper(get_woocommerce_currency());
+        $merchant['currency'] = strtoupper($order->get_currency());
         $merchant['user_basket'] = base64_encode(json_encode($user_basket));
 
         if($iframe) {
@@ -178,6 +178,18 @@ class PaytrCoreClass {
             'sslverify' => true,
             'timeout' => 90,
         );
+        // Persist the expected payment before PayTR can send a notification.
+        $contexts = $order->get_meta('_paytr_payment_contexts');
+        if (!is_array($contexts)) {
+            $contexts = array();
+        }
+        $contexts[$merchant['merchant_oid']] = array(
+            'amount' => $merchant['payment_amount'],
+            'currency' => $merchant['currency'],
+            'test_mode' => $merchant['test_mode'],
+        );
+        $order->update_meta_data('_paytr_payment_contexts', $contexts);
+        $order->save();
         $result = wp_remote_post('https://www.paytr.com/odeme/api/get-token', $wpCurlArgs);
 
         if (is_wp_error($result)) {
@@ -534,15 +546,8 @@ private function get_user_friendly_error($reason) {
 
     private function GetIP()
     {
-        if (isset($_SERVER["HTTP_CLIENT_IP"])) {
-            $ip = $_SERVER["HTTP_CLIENT_IP"];
-        } elseif (isset($_SERVER["HTTP_X_FORWARDED_FOR"])) {
-            $ip = $_SERVER["HTTP_X_FORWARDED_FOR"];
-        } else {
-            $ip = $_SERVER["REMOTE_ADDR"];
-        }
-
-        return $ip;
+        $ip = isset($_SERVER['REMOTE_ADDR']) ? $_SERVER['REMOTE_ADDR'] : '';
+        return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '';
     }
     public function parentCategoryParser(&$cats = array(), &$cat_tree = array()): void
     {

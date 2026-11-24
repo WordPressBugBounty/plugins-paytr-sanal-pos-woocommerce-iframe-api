@@ -3,7 +3,7 @@
  * Plugin Name: PayTR Virtual POS WooCommerce - iFrame API
  * Plugin URI: https://wordpress.org/plugins/paytr-sanal-pos-woocommerce-iframe-api/
  * Description: The infrastructure required to receive payments through WooCommerce with your PayTR membership.
- * Version: 3.1.2
+ * Version: 3.2.1
  * Author: PayTR Ödeme ve Elektronik Para Kuruluşu A.Ş.
  * Author URI: http://www.paytr.com/
  * License: GPL v2 or later
@@ -23,6 +23,11 @@ require_once plugin_dir_path(__FILE__) . 'includes/PaytrCoreClass.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-paytr-log-manager.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-paytr-error-solutions.php';
 require_once plugin_dir_path(__FILE__) . 'includes/class-paytr-log-viewer.php';
+
+// REVIEW WP-09: Guncelleme sonrasi ilk WordPress isteginde eski public loglari tasir.
+add_action('init', function () {
+    new PaytrLogManager();
+});
 
 // Ödeme gateway'lerini yükle
 function woocommerce_paytr_payment_gateway() {
